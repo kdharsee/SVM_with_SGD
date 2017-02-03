@@ -6,8 +6,8 @@ import pdb
 
 NUM_FEATURES = 123
 NUM_FEATURES_BIAS = NUM_FEATURES + 1
-NUM_ITERATIONS = 50
-ETA_TWEAK_START = 0
+NUM_ITERATIONS = 10
+ETA_TWEAK_START = 0.5
 ETA_TWEAK_STOP = 1
 ETA_TWEAK_STEP = 0.01
 
@@ -22,42 +22,40 @@ def generate_yx( data_list ): # This algorithm acts a generator which produces a
     for i in range( x.shape[0] ):
         yield (data_list[i][0],x[i]) #(y,x)
 
-def train_w( data_list, eta, C, num_iterations, init_w=None, init_b=None ): # This function is repsonsible for training the weight vector using a data list containing x and y matrix values
+
+def train_wb( data_list, eta, C, num_iterations, init_w=None, init_b=None ): # This function is repsonsible for training the weight vector using a data list containing x and y matrix values
 
     if ( init_w is None ):
-        w = np.zeros( shape=(1, NUM_FEATURES) )
+        w = np.ones( shape=(1, NUM_FEATURES) )
+        #w = np.random.rand( 1, NUM_FEATURES )
     else:
         w = init_w
     if ( init_b is None ):
         b = 0
     else:
         b = init_b
+
     for i in range( num_iterations ):
         # SVM with SGD Algorithm Begin
+        #pdb.set_trace()
         for y,x in generate_yx( data_list ):
-            ywx_plus_b =  float(y) * ( np.dot( w, x ) + b )
-            if ywx_plus_b < 1:
-                w = w + eta*( (w/NUM_FEATURES) - (C*y*x) )
+            ywx_b = float(y) * ( np.dot( w, x ) - b )
+            if ( 1 - ywx_b ) <= 0:
+                w = w - eta*( (w/float(NUM_FEATURES)) - (C*y*x) )
+                b = b + eta*C*y
             else:
-                w = w + eta*(w/NUM_FEATURES)
+                w = w - eta*(w/float(NUM_FEATURES))
         # SVM with SGD Algorithm End
     return w, b
+
 
 def test_wb( test_list, w, b ): # This value runs tests on a given set of data on a provided weight vector
     hits = 0
     for y,x in generate_yx( test_list ):
-        hits = hits + 1 if np.dot( w, x ) * float(y) > 0 else hits
-
+        hits = hits + 1 if (float(y) * ( np.dot( w, x ) - b )) > 0 else hits
+    print "Hits: {}".format( hits )
     return float(hits) / float(len(test_list))
-def usage( ):
-    print "Usage: python {} <training file> <dev file> <test file>".format( basename(__file__) )
-    return 0
 
-def check_args( argv, argc ):
-    if ( argc < 2 ):
-        usage()
-        sys.exit( "Incorrect Number of Arguments" )
-            
 
 #### MAIN ####
 def main( argv, argc ):
@@ -72,25 +70,35 @@ def main( argv, argc ):
         test_list = [[int(i.split(':')[0]) for i in line.split()] for line in fp.readlines()]
         
     #Training
-    eta = 0.01
+    eta = 0.5
     C = 0.9
-    w, b = train_wb( data_list, 0.01, NUM_ITERATIONS ) # Training
+    w, b = train_wb( data_list, eta, C, NUM_ITERATIONS ) # Training
     
     tweak_table = list()
     for eta_tweak in reversed( np.arange( ETA_TWEAK_START, ETA_TWEAK_STOP, ETA_TWEAK_STEP ) ): # Tweaking
         w, b = train_wb( data_list, eta_tweak, C, NUM_ITERATIONS, init_w=w, init_b=b ) 
-        hits = 0
-        for y,x in generate_yx( dev_list ):
-            hits = hits + 1 if np.dot( w, x ) * float(y) > 0 else hits
-
-        accuracy = float(hits) / float(len( dev_list ))
+        print w, b
+        accuracy = test_wb( dev_list, w, b )
         print (eta_tweak, accuracy)
         tweak_table.append( [eta_tweak, accuracy] )
 
     print tweak_table[:][np.argmax(np.asarray(tweak_table), axis=0)[1]] # Find max accuracy, associate all accuracies with etas in table
     
     accuracy = test_wb( test_list, w, b ) # Testing
-    print "Testing Accuracy: {}".format( accuracy )
+    print "Testing Set Accuracy: {}".format( accuracy )
 
+
+def usage( ):
+    print "Usage: python {} <training file> <dev file> <test file>".format( basename(__file__) )
+    return 0
+
+def check_args( argv, argc ):
+    if ( argc < 2 ):
+        usage()
+        sys.exit( "Incorrect Number of Arguments" )
+            
 if __name__ == "__main__":
     main( sys.argv, len( sys.argv ) ) 
+
+
+    
